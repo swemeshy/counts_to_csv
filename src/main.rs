@@ -2,12 +2,15 @@ use anyhow;
 use clap::Clap;
 use csv;
 use hdf5::types::VarLenUnicode;
+use indicatif::ProgressIterator;
+use log::info;
 use serde::Serialize;
+use simple_logger::SimpleLogger;
 use sprs::CsMatBase;
 use std::path::PathBuf;
 
 #[derive(Clap)]
-#[clap(about = "Write counts matrix of H5AD to CSV file")]
+#[clap(about = "Write counts matrix of H5 to CSV file")]
 struct Opts {
     #[clap(
         short = 'f',
@@ -20,11 +23,11 @@ struct Opts {
         short,
         long,
         arg_enum,
-        about = "orient CSV with var-names as columns or obs-names as columns"
+        about = "orient CSV with var-names as column names or obs-names as column names"
     )]
     column_orient: Orient,
-    #[clap(short, long, about = "delimiter", default_value = ",")]
-    delimiter: char,
+    #[clap(short, long, arg_enum, about = "delimiter", default_value = "comma")]
+    delimiter: Delimiter,
     #[clap(
         short,
         long,
@@ -34,68 +37,113 @@ struct Opts {
     outfile: PathBuf,
 }
 
+/// argument enum for delimiter
+#[derive(Clap)]
+enum Delimiter {
+    Comma,
+    Tab,
+    Colon,
+    Pipe,
+    Semicolon
+}
+
+/// argument enum for column_orient
 #[derive(Clap)]
 enum Orient {
     VarNames,
     ObsNames,
 }
 
+/// represents a row to be written to the CSV file
 #[derive(Serialize)]
-struct Row<'a, T, U> where T: Iterator<Item = f32>, U: Iterator<Item = usize> {
+struct Row<'a> {
     name: &'a str,
-    values: RowValIter<'a, T, U>
+    values: RowValIter<'a>,
 }
 
+/// an iterator wrapper for the indices and data of a CsVecBase object that represents one row
+/// in the counts matrix
 #[derive(Clone)]
-struct RowValIter<'a, T, U> where T: Iterator<Item = f32>, U: Iterator<Item = usize> {
-    data: T,
-    indices: U,
+struct RowValIter<'a> {
+    data: std::slice::Iter<'a, f32>,
+    indices: std::slice::Iter<'a, usize>,
+    next: Option<usize>,
     index: usize,
+    stop: usize,
 }
 
-impl<'a, T, U> RowValIter<'a, T, U> {
-    fn new(mut values: sprs::vec::CsVecBase<&[usize], &[f32]>) -> Self {
+/// to create a new instance of the RowValIter iterator wrapper
+impl<'a> RowValIter<'a> {
+    fn new(values: &'a sprs::vec::CsVecBase<&[usize], &[f32]>) -> RowValIter<'a> {
         let data_iter = values.data().iter();
-        let idx_iter = values.indices().iter();
-        RowValIter {data: data_iter, indices: idx_iter, index: 0}
-    }
-}
-
-impl<'a, T, U> Iterator for RowValIter<'a, T, U> where T: Iterator<Item = f32>, U: Iterator<Item = usize> {
-    type Item = f32;
-
-    fn next(&mut self) -> Option<Self::Item> {
-
-    }
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.next {
-            Some((ind, val)) => {
-                self.index += 1;
-                if ind == self.index - 1 {
-                    self.next = self.values.next();
-                    Some(*val)
-                } else {
-                    Some(0.0)
-                }
-            },
-            None => None,
+        let mut idx_iter = values.indices().iter();
+        let next = idx_iter.next().cloned();
+        let stop = values.dim();
+        RowValIter {
+            data: data_iter,
+            indices: idx_iter,
+            next,
+            index: 0,
+            stop,
         }
     }
 }
 
-impl Serialize for RowValIter<'_> {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: serde::Serializer, {
-        serializer.collect_seq(*self)
-        // serializer.collect_seq(self.0.borrow_mut().by_ref())
+/// iterator implementation for RowValIter
+impl<'a> Iterator for RowValIter<'a> {
+    type Item = f32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.next {
+            Some(ind) => {
+                if self.index == ind {
+                    self.next = self.indices.next().cloned();
+                    self.index += 1;
+                    self.data.next().cloned()
+                } else {
+                    self.index += 1;
+                    Some(0.0)
+                }
+            }
+            None => {
+                if self.index < self.stop {
+                    self.index += 1;
+                    Some(0.0)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+/// serialization implementation for RowValIter
+impl<'a> Serialize for RowValIter<'a> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.collect_seq(self.clone())
     }
 }
 
 fn main() -> anyhow::Result<()> {
+    // initiate logger
+    SimpleLogger::new().init().unwrap();
+
     let args = Opts::parse();
 
-    let delimiter = args.delimiter as u8; // can't convert :(
+    // get delimiter from args.delimiter
+    let delimiter = match args.delimiter {
+        Delimiter::Comma => b',',
+        Delimiter::Tab => b'\t',
+        Delimiter::Colon => b':',
+        Delimiter::Pipe => b'|',
+        Delimiter::Semicolon => b';'
+    };
 
+    // read counts matrix of H5 file into Vectors for sparse matrix construction
+    info!("Reading H5 file");
     let file = hdf5::File::open(args.h5_file)?;
 
     let genes_vec = file
@@ -111,43 +159,42 @@ fn main() -> anyhow::Result<()> {
     let indptr = file.dataset("X/indptr")?.read_1d::<usize>()?.to_vec();
     let indices = file.dataset("X/indices")?.read_1d::<usize>()?.to_vec();
 
+    // construct sparse matrix
     let mut counts_mtx =
         CsMatBase::try_new((obs_vec.len(), genes_vec.len()), indptr, indices, data)?;
 
-    let (header, first_col, column_names) = match args.column_orient {
-        Orient::VarNames => {
+    // transpose matrix if needed based on column orientation specified
+    let (header, first_col, row_names) = match args.column_orient {
+        Orient::ObsNames => {
             counts_mtx.transpose_mut();
+            counts_mtx = counts_mtx.to_csr();
             (obs_vec, "gene", genes_vec)
         }
-        Orient::ObsNames => (genes_vec, "cell", obs_vec),
+        Orient::VarNames => (genes_vec, "cell", obs_vec),
     };
 
-    // let mut row_iter = counts_mtx.outer_iterator();
-    // let first_row: sprs::CsVecBase<&[usize], &[f32]> = row_iter.next().unwrap();
-    // let mut first_row_iter: sprs::vec::VectorIterator<f32, usize> = first_row.iter();
-    // println!("{:?}", first_row_iter.next());
-
+    // open CSV file
+    info!("Writing {}", args.outfile.display());
     let mut writer = csv::WriterBuilder::new()
         .has_headers(false)
         .delimiter(delimiter)
-        .from_path(args.outfile)?;
-    let col_num = header.len();
-    let row_iter = counts_mtx.outer_iterator();
-    let mut i = 0;
+        .from_path(args.outfile.clone())?;
+
+    // write the column names
     writer.write_field(first_col)?;
     writer.write_record(header)?;
-    // use zip!!
-    for row in row_iter {
-        let row_val_iter = RowValIter::new(row);
+
+    // write the rows to the CSV file
+    let row_iter = counts_mtx.outer_iterator();
+    for (row, row_name) in row_iter.zip(row_names.iter()).progress() {
+        let row_val_iter = RowValIter::new(&row);
         writer.serialize(Row {
-            name: column_names[i].as_str(),
+            name: row_name,
             values: row_val_iter,
         })?;
-        // writer.write_field(column_names[i].as_str())?;
-        // writer.write_record(as_bytes(&row_vec))?;
-        i += 1;
-        break;
     }
+
+    info!("Done writing {}", args.outfile.display());
 
     Ok(())
 }
