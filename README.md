@@ -1,6 +1,6 @@
 # Counts to CSV
 
-Writes the counts matrix in an AnnData object to a CSV file. The file must be an H5 or H5AD file, and it must have the counts matrix in `/raw/X`.
+Writes the counts matrix in an AnnData object to a CSV file. The file must be an H5 or H5AD file, and it must have the counts matrix in `/X`.
 
 ## Installation
 
