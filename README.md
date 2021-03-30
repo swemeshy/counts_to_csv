@@ -6,7 +6,7 @@ Writes the counts matrix in an AnnData object to a CSV file. The file must be an
 
 You must have Rust installed. Instructions to install Rust are here: [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
 
-Clone the repository by running `https://github.com/swemeshy/counts_to_csv.git` in your terminal.
+Clone the repository by running `git clone https://github.com/swemeshy/counts_to_csv.git` in your terminal.
 
 Then in the repository, run `cargo build --release`. The compiled binary will be located here: `target/release/counts_to_csv`
 
