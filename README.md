@@ -2,6 +2,8 @@
 
 Writes the counts matrix in an AnnData object to a CSV file. The file must be an H5 or H5AD file, and it must have the counts matrix in `/X`.
 
+Note: Currently only writes matrices of float values.
+
 ## Installation
 
 You must have Rust installed. Instructions to install Rust are here: [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
