@@ -1,8 +1,6 @@
 # Counts to CSV
 
-Writes the counts matrix in an AnnData object to a CSV file. The file must be an H5 or H5AD file, and it must have the counts matrix in `/X`.
-
-Note: Currently only writes matrices of float values.
+Writes the counts matrix in an AnnData file to a CSV file. The file must be an H5 or H5AD file, and it must have the CSR formatted counts matrix in `/X/data`.
 
 ## Installation
 
@@ -12,13 +10,20 @@ Clone the repository by running `git clone https://github.com/swemeshy/counts_to
 
 Then in the repository, run `cargo build --release`. The compiled binary will be located here: `target/release/counts_to_csv`
 
-For ease of running the binary, you can add the following line to your startup file (e.g. `.bashrc`):
+For ease of running the binary, you can either
+* Add the path to the binary to your `PATH`
+* Move the binary to a folder on your `PATH`
+* Create a bash alias in your startup file. For example, for UNIX users, you can add this to `.bashrc`:
 
-`alias counts_to_csv="path/to/repo/target/release/counts_to_csv"`
+`alias counts_to_csv="/path/to/repo/target/release/counts_to_csv"`
 
 Make sure to reload your startup file!
 
 ## Arguments
+
+`-f, --h5-file <h5-file>`
+
+file path of H5 file that must be readable as an AnnData, and must have the counts matrix in CSR format
 
 `-c, --column-orient <column-orient>`
 
@@ -28,11 +33,7 @@ orient the CSV file with var-names as column names or obs-names as column names
 
 delimiter for the CSV file
 
-`-f, --h5-file <h5-file>`
-
-path to H5 file that must be readable as an AnnData, and must have the counts matrix in CSR format
-
 `-o, --outfile <outfile>`
 
-path and file name of the output CSV file
+file path of the output CSV file
 

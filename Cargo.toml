@@ -4,16 +4,14 @@ version = "0.1.0"
 authors = ["Swetha Ramesh <swetharamesh19@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 anyhow = "1.0"
 clap = "3.0.0-beta.2"
 csv = "1.1.6"
-hdf5 = "0.7.1"
+hdf5 = {git = "https://github.com/aldanor/hdf5-rust.git", rev = "24beeaa914a05c67adc78f0c161925fd4627d407"}
 indicatif = "0.15.0"
 log = "0.4.14"
-ndarray = "0.14.0"
+ndarray = "0.15.2"
 serde = { version = "1.0", features = ["derive"] }
 simple_logger = "1.11.0"
 sprs = "0.9.3"
