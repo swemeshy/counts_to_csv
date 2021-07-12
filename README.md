@@ -6,6 +6,8 @@ Writes the counts matrix in an AnnData file to a CSV file. The file must be an H
 
 ### Installation
 
+You must have Rust installed. Instructions to install Rust are here: [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
+
 You must have `setuptools-rust`. Install this package using `pip install setuptools-rust`.
 
 Clone the repository by running `git clone https://github.com/swemeshy/counts_to_csv.git` in your terminal.
